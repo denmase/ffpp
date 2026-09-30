@@ -223,27 +223,42 @@ for parser compatibility. `al:f` only changes the histogram range (0–255 vs
 
 ### Windows (MinGW-w64, produces `ffpp.dll` for 64-bit AviSynth+)
 
+Tool naming: standalone MinGW-w64 distributions (w64devkit, Debian's
+`gcc-mingw-w64`, etc.) prefix the tools with the target triplet
+(`x86_64-w64-mingw32-gcc`, `x86_64-w64-mingw32-dlltool`); inside an MSYS2
+UCRT64 shell the same tools are unprefixed (`gcc`, `dlltool`) because the
+environment already targets x86_64-w64-mingw32. The commands below use the
+unprefixed MSYS2 names.
+
 ```bat
 :: 0) import library for the avs_* functions (avisynth.dll is not needed at build time)
-x86_64-w64-mingw32-dlltool -d include/avs/avisynth.def -l libavisynth.a
+dlltool -d include/avs/avisynth.def -l libavisynth.a
 
-:: 1) generic build (any x64 CPU)
-x86_64-w64-mingw32-gcc -std=gnu89 -fcommon -O2 -shared -DHAVE_AV_CONFIG_H -DAVS_STATIC_LIB ^
-  -Iinclude/avs -Icompat -Isrc/libpostproc -o ffpp.dll src/ffpp.c src/libpostproc/postprocess.c ^
+:: 1) modern kernel object (FFPP2) - C99, namespaced symbols
+gcc -std=gnu99 -fcommon -O2 -DHAVE_AV_CONFIG_H ^
+  -Dpp_get_mode_by_name_and_quality=ffpp2_get_mode_by_name_and_quality ^
+  -Dpp_free_mode=ffpp2_free_mode -Dpp_get_context=ffpp2_get_context ^
+  -Dpp_free_context=ffpp2_free_context -Dpp_postprocess=ffpp2_postprocess ^
+  -Dpp_help=ffpp2_help ^
+  -Iinclude/avs -Icompat -Isrc/libpostproc2 -c -o postprocess2.o src/libpostproc2/postprocess.c
+
+:: 2) generic build (any x64 CPU), links both kernels
+gcc -std=gnu89 -fcommon -O2 -shared -DHAVE_AV_CONFIG_H -DAVS_STATIC_LIB ^
+  -Iinclude/avs -Icompat -Isrc/libpostproc -Isrc ^
+  -o ffpp.dll src/ffpp.c src/libpostproc/postprocess.c postprocess2.o ^
   -L. -lavisynth -Wl,--enable-auto-image-base -static-libgcc
 
-:: 2) AVX2 build (requires Haswell/Zen or newer)
-x86_64-w64-mingw32-gcc -std=gnu89 -fcommon -O3 -march=x86-64-v3 -fno-strict-aliasing -shared ^
-  -DHAVE_AV_CONFIG_H -DAVS_STATIC_LIB -Iinclude/avs -Icompat -Isrc/libpostproc ^
-  -o ffpp.dll src/ffpp.c src/libpostproc/postprocess.c ^
+:: 3) AVX2 build (requires Haswell/Zen or newer): replace step 2 with
+gcc -std=gnu89 -fcommon -O3 -march=x86-64-v3 -fno-strict-aliasing -shared ^
+  -DHAVE_AV_CONFIG_H -DAVS_STATIC_LIB -Iinclude/avs -Icompat -Isrc/libpostproc -Isrc ^
+  -o ffpp.dll src/ffpp.c src/libpostproc/postprocess.c postprocess2.o ^
   -L. -lavisynth -Wl,--enable-auto-image-base -static-libgcc
 ```
 
-> Important flags: `-std=gnu89 -fcommon` = GCC 12+ tolerance for year-2004 C
-> code (implicit function declarations become warnings again);
-> `-DAVS_STATIC_LIB` = disable `dllimport` from `capi.h` so the `avs_*` symbols
-> are resolved by name from `avisynth.dll` at load time (the import library is
-> produced with `dlltool` from `avisynth.def`).
+> Important flags: `-std=gnu89 -fcommon` = GCC 12+ tolerance for the year-2004
+> classic kernel; the modern kernel needs `-std=gnu99`. `-DAVS_STATIC_LIB` =
+> disable `dllimport` from `capi.h` so the `avs_*` symbols are resolved by name
+> from `avisynth.dll` at load time.
 
 ### Linux (verification/testing)
 
