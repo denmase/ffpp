@@ -38,7 +38,7 @@ jobs:
         with:
           msystem: UCRT64
           update: true
-          install: mingw-w64-ucrt-x86_64-gcc make
+          install: mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-binutils make
       - name: Build import library
         shell: msys2 {0}
         run: x86_64-w64-mingw32-dlltool -d include/avs/avisynth.def -l libavisynth.a
