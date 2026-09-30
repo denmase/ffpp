@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  linux-test:
+    name: Build and test (Linux, mock AviSynth host)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gcc make
+      - name: Build libffpp.so
+        run: make
+      - name: Test suite (FFPP 32 + FFPP2 31 byte-identical scenarios)
+        run: make check
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libffpp-linux-x86_64
+          path: libffpp.so
+
+  windows:
+    name: Build ffpp.dll (${{ matrix.name }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: plain, cflags: "-O2" }
+          - { name: avx2,  cflags: "-O3 -march=x86-64-v3 -fno-strict-aliasing" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc make
+      - name: Build import library
+        shell: msys2 {0}
+        run: x86_64-w64-mingw32-dlltool -d include/avs/avisynth.def -l libavisynth.a
+      - name: Build modern kernel object (FFPP2)
+        shell: msys2 {0}
+        run: >-
+          x86_64-w64-mingw32-gcc -std=gnu99 -fcommon -O2 -DHAVE_AV_CONFIG_H
+          -Dpp_get_mode_by_name_and_quality=ffpp2_get_mode_by_name_and_quality
+          -Dpp_free_mode=ffpp2_free_mode -Dpp_get_context=ffpp2_get_context
+          -Dpp_free_context=ffpp2_free_context -Dpp_postprocess=ffpp2_postprocess
+          -Dpp_help=ffpp2_help
+          -Iinclude/avs -Icompat -Isrc/libpostproc2
+          -c -o postprocess2.o src/libpostproc2/postprocess.c
+      - name: Build ffpp.dll (${{ matrix.name }})
+        shell: msys2 {0}
+        run: >-
+          x86_64-w64-mingw32-gcc -std=gnu89 -fcommon ${{ matrix.cflags }} -shared
+          -DHAVE_AV_CONFIG_H -DAVS_STATIC_LIB
+          -Iinclude/avs -Icompat -Isrc/libpostproc -Isrc
+          -o ffpp.dll src/ffpp.c src/libpostproc/postprocess.c postprocess2.o
+          -L. -lavisynth -Wl,--enable-auto-image-base -static-libgcc
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffpp-windows-x86_64-${{ matrix.name }}
+          path: ffpp.dll

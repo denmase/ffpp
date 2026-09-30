@@ -1,0 +1,4 @@
+
+# Legacy libpostproc bug: tempNoiseReducer reads tempBlurredPast[-256..-1],
+# which in the original C is a heap read before the buffer (UB). Tolerated to stay 1:1.
+heap-buffer-overflow:tempNoiseReducer

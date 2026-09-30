@@ -1,0 +1,23 @@
+LIBRARY avisynth.dll
+EXPORTS
+  avs_add_function
+  avs_get_version
+  avs_new_c_filter
+  avs_release_clip
+  avs_set_to_clip
+  avs_get_frame
+  avs_release_video_frame
+  avs_new_video_frame_p_a
+  avs_get_read_ptr_p
+  avs_get_write_ptr_p
+  avs_get_pitch_p
+  avs_get_row_size_p
+  avs_get_height_p
+  avs_num_components
+  avs_component_size
+  avs_is_planar
+  avs_is_yuv
+  avs_has_video
+  avs_is_420
+  avs_is_422
+  avs_is_444

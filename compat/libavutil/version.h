@@ -1,0 +1,10 @@
+
+#ifndef FFPP_LIBAVUTIL_VERSION_H
+#define FFPP_LIBAVUTIL_VERSION_H
+#define AV_VERSION_INT(a, b, c) (((a) << 16) | ((b) << 8) | (c))
+#define AV_STRINGIFY(s) AV_TOSTRING(s)
+#define AV_TOSTRING(s) #s
+#define LIBAVUTIL_VERSION_INT  AV_VERSION_INT(59, 8, 100)
+#define LIBAVUTIL_VERSION      AV_STRINGIFY(LIBAVUTIL_VERSION_INT)
+#define LIBAVUTIL_BUILD        0
+#endif
