@@ -87,7 +87,11 @@ static AVS_VideoFrame *AVSC_CC get_frame(AVS_FilterInfo *fi, int n)
     if (!src) { fi->error = "FFPP: failed to get source frame"; return NULL; }
 
     dst = avs_new_video_frame_p_a(env, &fi->vi, src, AVS_FRAME_ALIGN);
-    if (!dst) { fi->error = "FFPP: frame allocation failed"; return NULL; }
+    if (!dst) {
+        avs_release_video_frame(src);  /* fix A: no leak on this error path */
+        fi->error = "FFPP: frame allocation failed";
+        return NULL;
+    }
 
     ffpp_lock(d);
 
@@ -98,7 +102,7 @@ static AVS_VideoFrame *AVSC_CC get_frame(AVS_FilterInfo *fi, int n)
         int srcPitch = avs_get_pitch_p(src, planes[p]);
         const unsigned char *s = avs_get_read_ptr_p(src, planes[p]);
         int y;
-        if (!grow_scratch(d, p, (size_t)srcPitch * h + 64)) {
+        if (!grow_scratch(d, p, (size_t)srcPitch * (size_t)(h + 4))) {
             ffpp_unlock(d);
             avs_release_video_frame(src);
             if (dst) avs_release_video_frame(dst);
@@ -110,6 +114,9 @@ static AVS_VideoFrame *AVSC_CC get_frame(AVS_FilterInfo *fi, int n)
             if (srcPitch > w)  /* zero the padding for deterministic output */
                 memset(d->scratch[p] + (size_t)y * srcPitch + w, 0, (size_t)(srcPitch - w));
         }
+        /* fix D: zero the extra guard rows so filters reading y+1/y+2 at the
+           last frame row never touch uninitialized or out-of-bounds memory */
+        memset(d->scratch[p] + (size_t)h * srcPitch, 0, (size_t)srcPitch * 4);
         srcp[p]      = d->scratch[p];
         srcStride[p] = srcPitch;
         dstp[p]      = avs_get_write_ptr_p(dst, planes[p]);
@@ -230,8 +237,8 @@ static AVS_Value create_ex(AVS_ScriptEnvironment *env, AVS_Value args,
     }
 
     d = (FFPPData *)calloc(1, sizeof(FFPPData));
-    d->k = k;
     if (!d) { avs_release_clip(clip); return avs_new_value_error("FFPP: out of memory"); }
+    d->k = k;
 
 #ifdef _WIN32
     InitializeCriticalSection(&d->cs);
@@ -268,7 +275,7 @@ static AVS_Value create_ex(AVS_ScriptEnvironment *env, AVS_Value args,
 
     d->ctx = k->get_context(vi->width, vi->height, PP_FORMAT | hsub | (vsub << 4));
     if (!d->ctx) {
-        pp_free_mode(d->mode);
+        d->k->free_mode(d->mode);  /* fix B: free via the owning kernel's vtable */
         free(d);
         avs_release_clip(clip);
         return avs_new_value_error("FFPP: pp_get_context failed");
